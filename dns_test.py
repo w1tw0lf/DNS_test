@@ -52,22 +52,18 @@ print("DOT results")
 print(table)
 
 
-with open("dig_output", "r") as file:
+with open('dns', 'r') as file:
     lines = file.readlines()
-table = PrettyTable(["Address"])
-command = ["curl", "-6", "-s", "-I", "www.google.com"]
-result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-if "HTTP/1.1 200 OK" in result.stdout:
-    for i in range(len(lines)):
-        line = lines[i]        
-        address = lines[i]
-        table.add_row([address])        
-else:
-    for i in range(len(lines)-2):
-        line = lines[i]
-        address = lines[i]
-        table.add_row([address])
-    table.add_row(["N/A"])           
+with open('dns6', 'r') as file6:
+    lines6 = file6.readlines()    
+
+table = PrettyTable(['Address'])
+for line in lines:
+    address = line.strip()
+    table.add_row([address])
+for line in lines6:
+    address = line.strip()
+    table.add_row([address])              
 
 print("")
 print("DNS results")

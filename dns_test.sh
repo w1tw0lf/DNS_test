@@ -92,9 +92,8 @@ if [ -n "$ipv6_local_status" ] && [ -n "$ipv6_wan_status" ]; then
     fi
 
     echo "DNS test...."
-    dig_command="dig $domain +short && dig $domain AAAA +short"
-    dig_output=$(eval "$dig_command")
-    echo "$dig_output" > dig_output
+    dig "$domain" +short > dns
+    dig "$domain" AAAA +short > dns6
 
     echo "Ping test...."
     json_file="ping_results.json"
@@ -129,7 +128,7 @@ if [ -n "$ipv6_local_status" ] && [ -n "$ipv6_wan_status" ]; then
 
     echo ""
     python3 dns_test.py
-    rm doh4_output doh6_output dig_output ping_results.json dot dot6
+    rm doh4_output doh6_output dns dns6 ping_results.json dot dot6
 else
     echo "IPv6 checks failed. Testing IPv4 only..."
     while true; do
@@ -176,11 +175,8 @@ else
 
 
     echo "DNS test...."
-    dig_command="dig $domain +short"
-    dig_output=$(eval "$dig_command")
-    echo "$dig_output" > dig_output
-    dig6_output="N/A"
-    echo "$dig6_output" >> dig_output
+    dig "$domain" +short > dns
+    dig "$domain" AAAA +short > dns6
 
     echo "Ping test...."
     json_file="ping_results.json"
@@ -206,5 +202,5 @@ else
 
     echo ""
     python3 dns_test.py
-    rm doh4_output doh6_output dig_output ping_results.json dot dot6
+    rm doh4_output doh6_output dns dns6 ping_results.json dot dot6
 fi
