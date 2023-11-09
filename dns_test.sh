@@ -110,10 +110,10 @@ if [ -n "$ipv6_local_status" ] && [ -n "$ipv6_wan_status" ]; then
         result1=($(ping -c4 $domain | grep from))
         result2=($(ping6 -c4 $domain | grep from))
         formatted_results=()
-        for ((i = 0; i < ${#result1[@]}; i += 9)); do
+        for ((i = 0; i < ${#result1[@]}; i += 8)); do
             formatted_results+=("${result1[i+6]} ${result1[i+7]}")
         done
-        for ((i = 0; i < ${#result2[@]}; i += 9)); do
+        for ((i = 0; i < ${#result2[@]}; i += 8)); do
             formatted_results+=("${result2[i+6]} ${result2[i+7]}")
         done        
     else
