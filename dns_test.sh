@@ -37,7 +37,7 @@ else
 fi
 echo ""
 os_system=$(uname)
-if [ "$os_system" == "Darwin" ]; then  # Mac OS
+if [ "$os_system" == "Darwin" ]; then
     ipv6_local_status=$(ifconfig | grep inet6)
 elif [ "$os_system" == "Linux" ]; then
     ipv6_local_status=$(ip -6 addr show)
@@ -98,8 +98,13 @@ if [ -n "$ipv6_local_status" ] && [ -n "$ipv6_wan_status" ]; then
 
     echo "Ping test...."
     json_file="ping_results.json"
-    result1=($(ping -c 4 -4 $domain | grep from))
-    result2=($(ping -c 4 -6 $domain | grep from))
+    if [ "$os_system" == "Darwin" ]; then
+        result1=($(ping -c4 $domain | grep from))
+        result2=($(ping6 -c4 $domain | grep from))
+    else
+        result1=($(ping -c4 -4 $domain | grep from))
+        result2=($(ping -c4 -6 $domain | grep from))
+    fi
     formatted_results=()
     for ((i = 0; i < ${#result1[@]}; i += 9)); do
         formatted_results+=("${result1[i+7]} ${result1[i+8]}")
