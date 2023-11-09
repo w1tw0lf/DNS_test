@@ -29,6 +29,8 @@ fi
 
 if python -c "import prettytable" &> /dev/null; then
     &>/dev/null
+elif python3 -c "import prettytable" &> /dev/null; then
+    &>/dev/null
 else
     echo "Please install prettytable module before this script."
     exit 1   
