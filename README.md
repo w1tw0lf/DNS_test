@@ -16,11 +16,11 @@ Test is run with [Adam:one](https://adamnet.works/) on pfSense
 
 ### Installing python modules:
 ```
-python -m pip install -U prettytable
+pip install -U prettytable
 ```
 or
 ```
-python3 -m pip install -U prettytable
+pip3 install -U prettytable
 ```
 if the above fails,
 for debian or ubuntu based:
