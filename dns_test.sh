@@ -96,9 +96,9 @@ if [ -n "$ipv6_local_status" ] && [ -n "$ipv6_wan_status" ]; then
         ns_command="nslookup $domain"
         ns_output=$(eval "$ns_command")
         echo "$ns_output" > ns_output
-        getent_command="getent hosts $domain| awk '{print $1}'"
-        getent_output=$(eval "$getent_command" )
-        echo "Address: $getent_output" >> ns_output
+        dig_command="dig $domain AAAA +short"
+        dig_output=$(eval "$dig_command" )
+        echo "Address: $dig_output" >> ns_output
     else
         ns_command="nslookup $domain"
         ns_output=$(eval "$ns_command")
