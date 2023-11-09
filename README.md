@@ -22,3 +22,10 @@ or
 ```
 python3 -m pip install -U prettytable
 ```
+
+### To run locally
+```
+git clone https://github.com/w1tw0lf/DNS_test.git
+cd DNS_test/
+./dns_test.sh
+```
