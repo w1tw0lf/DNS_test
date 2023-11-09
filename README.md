@@ -6,7 +6,7 @@ Test is run with [Adam:one](https://adamnet.works/) on pfSense
 
 ## Requirements:
 <ol>
- <li>Currently only support linux, not tested on mac or windows.
+ <li>Currently supports linux and mac. It should run on windows in [wsl](https://learn.microsoft.com/en-us/windows/wsl/install) *not tested*
 <li> Needs python with modules installed:
    <ol>
      <li>Prettytable</li>
