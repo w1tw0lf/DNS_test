@@ -36,7 +36,15 @@ else
     exit 1   
 fi
 echo ""
-ipv6_local_status=$(ip -6 addr show)
+if [ "$os_system" == "Darwin" ]; then  # Mac OS
+    ipv6_local_status=$(ifconfig | grep inet6)
+elif [ "$os_system" == "Linux" ]; then
+    ipv6_local_status=$(ip -6 addr show)
+else
+    echo "Unsupported operating system"
+    exit 1
+fi
+
 ipv6_wan_status=$(curl -6 -s -I www.google.com)
 if [ -n "$ipv6_local_status" ] && [ -n "$ipv6_wan_status" ]; then
     echo "Both local machine and WAN support IPv6. Testing both IPv4 and IPv6..."
