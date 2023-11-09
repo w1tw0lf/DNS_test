@@ -109,17 +109,25 @@ if [ -n "$ipv6_local_status" ] && [ -n "$ipv6_wan_status" ]; then
     if [ "$os_system" == "Darwin" ]; then
         result1=($(ping -c4 $domain | grep from))
         result2=($(ping6 -c4 $domain | grep from))
+        formatted_results=()
+        for ((i = 0; i < ${#result1[@]}; i += 9)); do
+            formatted_results+=("${result1[i+6]} ${result1[i+7]}")
+        done
+        for ((i = 0; i < ${#result2[@]}; i += 9)); do
+            formatted_results+=("${result2[i+6]} ${result2[i+7]}")
+        done        
     else
         result1=($(ping -c4 -4 $domain | grep from))
         result2=($(ping -c4 -6 $domain | grep from))
+        formatted_results=()
+        for ((i = 0; i < ${#result1[@]}; i += 9)); do
+            formatted_results+=("${result1[i+7]} ${result1[i+8]}")
+        done
+        for ((i = 0; i < ${#result2[@]}; i += 9)); do
+            formatted_results+=("${result2[i+7]} ${result2[i+8]}")
+        done        
     fi
-    formatted_results=()
-    for ((i = 0; i < ${#result1[@]}; i += 9)); do
-        formatted_results+=("${result1[i+7]} ${result1[i+8]}")
-    done
-    for ((i = 0; i < ${#result2[@]}; i += 9)); do
-        formatted_results+=("${result2[i+7]} ${result2[i+8]}")
-    done
+
     json_data="{ \"results\": ["
     for line in "${formatted_results[@]}"; do
         json_data="${json_data} \"$line\","
