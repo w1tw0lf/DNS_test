@@ -36,6 +36,7 @@ else
     exit 1   
 fi
 echo ""
+os_system=$(uname)
 if [ "$os_system" == "Darwin" ]; then  # Mac OS
     ipv6_local_status=$(ifconfig | grep inet6)
 elif [ "$os_system" == "Linux" ]; then
