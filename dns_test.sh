@@ -92,18 +92,10 @@ if [ -n "$ipv6_local_status" ] && [ -n "$ipv6_wan_status" ]; then
     fi
 
     echo "DNS test...."
-    if [ "$os_system" == "Darwin" ]; then    
-        ns_command="nslookup $domain"
-        ns_output=$(eval "$ns_command")
-        echo "$ns_output" > ns_output
-        dig_command="dig $domain AAAA +short"
-        dig_output=$(eval "$dig_command" )
-        echo "Address: $dig_output" >> ns_output
-    else
-        ns_command="nslookup $domain"
-        ns_output=$(eval "$ns_command")
-        echo "$ns_output" >ns_output
-    fi
+    dig_command="dig $domain +short && dig $domain AAAA +short"
+    dig_output=$(eval "$dig_command")
+    echo "$dig_output" > dig_output
+
     echo "Ping test...."
     json_file="ping_results.json"
     if [ "$os_system" == "Darwin" ]; then
@@ -137,7 +129,7 @@ if [ -n "$ipv6_local_status" ] && [ -n "$ipv6_wan_status" ]; then
 
     echo ""
     python3 dns_test.py
-    rm doh4_output doh6_output ns_output ping_results.json dot dot6
+    rm doh4_output doh6_output dig_output ping_results.json dot dot6
 else
     echo "IPv6 checks failed. Testing IPv4 only..."
     while true; do
@@ -184,18 +176,27 @@ else
 
 
     echo "DNS test...."
-    ns_command="nslookup $domain"
-    ns_output=$(eval "$ns_command")
-    echo "$ns_output" >ns_output
+    dig_command="dig $domain +short"
+    dig_output=$(eval "$dig_command")
+    echo "$dig_output" > dig_output
+    dig6_output="N/A"
+    echo "$dig6_output" >> dig_output
 
     echo "Ping test...."
     json_file="ping_results.json"
-    result1=($(ping -c 4 -4 $domain | grep from))
-    formatted_results=()
-    for ((i = 0; i < ${#result1[@]}; i += 9)); do
-        formatted_results+=("${result1[i+7]} ${result1[i+8]}")
-    done
-
+    if [ "$os_system" == "Darwin" ]; then
+        result1=($(ping -c4 $domain | grep from))
+        formatted_results=()
+        for ((i = 0; i < ${#result1[@]}; i += 8)); do
+            formatted_results+=("${result1[i+6]} ${result1[i+7]}")
+        done       
+    else
+        result1=($(ping -c4 -4 $domain | grep from))
+        formatted_results=()
+        for ((i = 0; i < ${#result1[@]}; i += 9)); do
+            formatted_results+=("${result1[i+7]} ${result1[i+8]}")
+        done  
+    fi
     json_data="{ \"results\": ["
     for line in "${formatted_results[@]}"; do
         json_data="${json_data} \"$line\","
@@ -205,5 +206,5 @@ else
 
     echo ""
     python3 dns_test.py
-    rm doh4_output doh6_output ns_output ping_results.json dot dot6
+    rm doh4_output doh6_output dig_output ping_results.json dot dot6
 fi
