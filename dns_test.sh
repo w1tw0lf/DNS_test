@@ -29,13 +29,8 @@ fi
 if python -c "import prettytable" &> /dev/null; then
     echo ""
 else
-    echo "prettytable is not installed. Installing..."
-    if command -v python3 &>/dev/null; then
-        pip3 install prettytable
-    else
-        pip install prettytable
-    fi
-    
+    echo "Please install prettytable module before this script."
+    exit 1   
 fi
 
 ipv6_local_status=$(ip -6 addr show)

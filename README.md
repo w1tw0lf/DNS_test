@@ -22,6 +22,15 @@ or
 ```
 python3 -m pip install -U prettytable
 ```
+if the above fails,
+for debian or ubuntu based:
+```
+sudo apt install python3-prettytable
+```
+for arch based
+```
+sudo pacman -S python3-prettytable
+```
 
 ### To run locally
 ```
