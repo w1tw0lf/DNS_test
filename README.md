@@ -6,7 +6,7 @@ Test is run with [Adam:one](https://adamnet.works/) on pfSense
 
 ## Requirements:
 <ol>
- <li>Currently supports linux and mac. It should run on windows in [wsl](https://learn.microsoft.com/en-us/windows/wsl/install) *not tested*
+ <li>Currently supports linux and mac. It should run on windows in WSL *not tested*
 <li> Needs python with modules installed:
    <ol>
      <li>Prettytable</li>
@@ -31,6 +31,7 @@ for arch based
 ```
 sudo pacman -S python3-prettytable
 ```
+### More info on [WSL]('https://learn.microsoft.com/en-us/windows/wsl/install')
 
 ### To run locally
 ```
