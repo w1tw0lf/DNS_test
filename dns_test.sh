@@ -10,29 +10,30 @@ echo "                                        "
 echo "----------------------------------------------------- "
 
 if command -v python3 &>/dev/null; then
-    echo ""
+    &>/dev/null
 elif command -v python2 &>/dev/null; then
-    echo ""
+    &>/dev/null
 else
     echo "Please install Python before this script."
     exit 1
 fi
+
 if command -v pip3 &>/dev/null; then
-    echo ""
+    &>/dev/null 
 elif command -v pip &>/dev/null; then
-    echo ""
+    &>/dev/null
 else
     echo "Please install pip before this script."
     exit 1
 fi
 
 if python -c "import prettytable" &> /dev/null; then
-    echo ""
+    &>/dev/null
 else
     echo "Please install prettytable module before this script."
     exit 1   
 fi
-
+echo ""
 ipv6_local_status=$(ip -6 addr show)
 ipv6_wan_status=$(curl -6 -s -I www.google.com)
 if [ -n "$ipv6_local_status" ] && [ -n "$ipv6_wan_status" ]; then
