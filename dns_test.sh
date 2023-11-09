@@ -14,7 +14,15 @@ if command -v python3 &>/dev/null; then
 elif command -v python2 &>/dev/null; then
     echo ""
 else
-    echo "Please install Python with prettytables, json modules before running this script."
+    echo "Please install Python before this script."
+    exit 1
+fi
+if command -v pip3 &>/dev/null; then
+    echo ""
+elif command -v pip &>/dev/null; then
+    echo ""
+else
+    echo "Please install pip before this script."
     exit 1
 fi
 
