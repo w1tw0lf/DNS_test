@@ -1,5 +1,6 @@
 from prettytable import PrettyTable
 import json
+import subprocess
 
 with open("doh6_output", "r") as file:
     doh6_data = file.read()
@@ -54,19 +55,21 @@ print(table)
 with open("ns_output", "r") as file:
     lines = file.readlines()
 table = PrettyTable(["Address"])
-if len(lines) == 6:
+command = ["curl", "-6", "-s", "-I", "www.google.com"]
+result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+if "HTTP/1.1 200 OK" in result.stdout:
     for i in range(len(lines)):
+        line = lines[i].strip()
+        if line.startswith("Name:"):
+            address = lines[i + 1].strip("Address:").strip()
+            table.add_row([address])        
+else:
+    for i in range(len(lines)-2):
         line = lines[i].strip()
         if line.startswith("Name:"):
             address = lines[i + 1].strip("Address:").strip()
             table.add_row([address])
-    table.add_row(["N/A"])          
-else:
-    for i in range(len(lines)):
-        line = lines[i].strip()
-        if line.startswith("Name:"):
-            address = lines[i + 1].strip("Address:").strip()
-            table.add_row([address])          
+    table.add_row(["N/A"])           
     
 print("")
 print("DNS results")
