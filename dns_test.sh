@@ -92,10 +92,18 @@ if [ -n "$ipv6_local_status" ] && [ -n "$ipv6_wan_status" ]; then
     fi
 
     echo "DNS test...."
-    ns_command="nslookup $domain"
-    ns_output=$(eval "$ns_command")
-    echo "$ns_output" >ns_output
-
+    if [ "$os_system" == "Darwin" ]; then    
+        ns_command="nslookup $domain"
+        ns_output=$(eval "$ns_command")
+        echo "$ns_output" > ns_output
+        getent_command="getent hosts $domain| awk '{print $1}'"
+        getent_output=$(eval "$getent_command" )
+        echo "Address: $getent_output" >> ns_output
+    else
+        ns_command="nslookup $domain"
+        ns_output=$(eval "$ns_command")
+        echo "$ns_output" >ns_output
+    fi
     echo "Ping test...."
     json_file="ping_results.json"
     if [ "$os_system" == "Darwin" ]; then
