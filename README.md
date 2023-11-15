@@ -4,6 +4,12 @@ Test DNS server with DOH, DOT, DNS and run ping test with IPv4 and IPv6.
 
 Test is run with [Adam:one](https://adamnet.works/) on pfSense
 
+<img
+  src="/assets/results.png"
+  alt="Results"
+  title="Results"
+  style="display: inline-block;">
+
 ## Requirements:
 <ol>
  <li>Currently supports linux and mac. It should run on windows in WSL *not tested*
