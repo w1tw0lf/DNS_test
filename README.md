@@ -45,3 +45,6 @@ git clone https://github.com/w1tw0lf/DNS_test.git
 cd DNS_test/
 ./dns_test.sh
 ```
+### Possible issues
+
+1. On older macOS, you might find that it gives an issue with dig command, fix is to update bind via brew witth ```brew install bind```
