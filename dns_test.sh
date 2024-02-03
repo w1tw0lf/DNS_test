@@ -176,7 +176,7 @@ else
 
     echo "DNS test...."
     dig "$domain" +short > dns
-    echo "N/A" > dns6
+    dig "$domain" AAAA +short > dns6
 
     echo "Ping test...."
     json_file="ping_results.json"

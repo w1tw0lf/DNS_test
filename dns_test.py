@@ -13,20 +13,16 @@ doh4_data_json = json.loads(doh4_data)
 answers6 = doh6_data_json.get("Answer", [])
 answers4 = doh4_data_json.get("Answer", [])
 table = PrettyTable()
-table.field_names = ["Type", "TTL", "Address"]
+table.field_names = ["Address"]
 for answer4 in answers4:
     table.add_row(
         [
-            answer4.get("type", ""),
-            answer4.get("TTL", ""),
             answer4.get("data", ""),
         ]
     )
 for answer6 in answers6:
     table.add_row(
         [
-            answer6.get("type", ""),
-            answer6.get("TTL", ""),
             answer6.get("data", ""),
         ]
     )    
