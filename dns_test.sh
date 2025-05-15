@@ -1,206 +1,248 @@
 #!/bin/bash
 
-clear
-echo " ____  _   _ ____    _____         _    "
-echo "|  _ \| \ | / ___|  |_   _|__  ___| |_  "
-echo "| | | |  \| \___ \    | |/ _ \/ __| __| "
-echo "| |_| | |\  |___) |   | |  __/\__ \ |_  "
-echo "|____/|_| \_|____/    |_|\___||___/\__| "
-echo "                                        "
-echo "----------------------------------------------------- "
+# This script checks for IPv4 and IPv6 connectivity and then performs
+# DNS, DoT, DoH, and ping tests for a specified domain.
+# Dependencies: dig, ping, ping -6, curl, jq
 
-if command -v python3 &>/dev/null; then
-    &>/dev/null
-elif command -v python2 &>/dev/null; then
-    &>/dev/null
-else
-    echo "Please install Python before this script."
-    exit 1
-fi
+# --- Default Public DNS Servers for Tests ---
+# Used for initial connectivity check and standard DNS test
+DEFAULT_DNS_SERVER_IPV4=$(dig $domain+noall +stats | awk '/SERVER:/ {sub(/#.*/, "", $3); print $3}' | tr -d '\n')
+DEFAULT_DNS_SERVER_IPV6=$(dig $domain+noall +stats | awk '/SERVER:/ {sub(/#.*/, "", $3); print $3}' | tr -d '\n')
 
-if command -v pip3 &>/dev/null; then
-    &>/dev/null 
-elif command -v pip &>/dev/null; then
-    &>/dev/null
-else
-    echo "Please install pip before this script."
-    exit 1
-fi
+# Used for DoT test
+DEFAULT_DOT_SERVER_IPV4=$(dig $domain+noall +stats | awk '/SERVER:/ {sub(/#.*/, "", $3); print $3}' | tr -d '\n')
+DEFAULT_DOT_SERVER_IPV6=$(dig $domain+noall +stats | awk '/SERVER:/ {sub(/#.*/, "", $3); print $3}' | tr -d '\n')
 
-if python -c "import prettytable" &> /dev/null; then
-    &>/dev/null
-elif python3 -c "import prettytable" &> /dev/null; then
-    &>/dev/null
-else
-    echo "Please install prettytable module before this script."
-    exit 1   
-fi
-echo ""
-os_system=$(uname)
-if [ "$os_system" == "Darwin" ]; then
-    ipv6_local_status=$(ifconfig | grep inet6)
-elif [ "$os_system" == "Linux" ]; then
-    ipv6_local_status=$(ip -6 addr show)
-else
-    echo "Unsupported operating system"
-    exit 1
-fi
+# Used for DoH test (hostname for dig +https)
+DEFAULT_DOH_SERVER=($(dig SVCB _dns.resolver.arpa +short | awk 'NF && /^1 / {sub(/\.$/, "", $2); print $2}'))
+# -------------------------------------------
 
-ipv6_wan_status=$(curl -6 -s -I www.google.com)
-if [ -n "$ipv6_local_status" ] && [ -n "$ipv6_wan_status" ]; then
-    echo "Both local machine and WAN support IPv6. Testing both IPv4 and IPv6..."
-    while true; do
-        read -p "Enter the domain (e.g. google.com): " domain
 
-        if [[ $domain =~ ^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
-            if nslookup $domain >/dev/null 2>&1; then
-                echo ""
-                break
-            else
-                echo "Domain $domain is valid but does not exist. Please enter a valid domain."
-            fi
-        else
-            echo "Invalid domain. Please enter a valid domain."
-        fi
-    done
+# Function to check IPv4/IPv6 connectivity
+check_connectivity() {
+    echo "Checking IPv4 and IPv6 connectivity..."
 
-    doh_server=($(dig SVCB _dns.resolver.arpa +short | awk -F'1' '{print $2}' | awk -F'. ' '{print $1}'))
-    if [ -n "$doh_server" ]; then
-        echo "DOH test...."
-        doh4="curl -s -H 'accept: application/dns-json' 'https://$doh_server/dns-query?name=$domain&type=A'"
-        doh4_output=$(eval "$doh4")
-        echo "$doh4_output" >doh4_output
+    # Use dig to check for A (IPv4) and AAAA (IPv6) records for a reliable domain
+    # Using default public DNS servers for the check to determine general connectivity
+    ipv4_status=$(dig +short A google.com @"$DEFAULT_DNS_SERVER_IPV4")
+    ipv6_status=$(dig +short AAAA google.com @"$DEFAULT_DNS_SERVER_IPV6")
 
-        doh6="curl -s -H 'accept: application/dns-json' 'https://$doh_server/dns-query?name=$domain&type=AAAA'"
-        doh6_output=$(eval "$doh6")
-        echo "$doh6_output" >doh6_output
+    has_ipv4=false
+    has_ipv6=false
 
-        echo "DOT test...."
-        dig +tls "$domain" +short > dot
-        dig +tls "$domain" AAAA +short > dot6
-    else
-        echo "No DOH server available"
-        doh4_output='{"Answer":[{"name":"N/A","type":"N/A","TTL":"N/A","data":"N/A"}]}'
-        echo "$doh4_output" >doh4_output
-
-        doh6_output='{"Answer":[{"name":"N/A","type":"N/A","TTL":"N/A","data":"N/A"}]}'
-        echo "$doh6_output" >doh6_output
-
-        echo "No DOT server available"
-        echo "N/A" > dot
-        echo "N/A" > dot6
+    # Check if dig returned any results for IPv4
+    if [[ -n "$ipv4_status" ]]; then
+        has_ipv4=true
     fi
 
-    echo "DNS test...."
-    dig "$domain" +short > dns
-    dig "$domain" AAAA +short > dns6
-
-    echo "Ping test...."
-    json_file="ping_results.json"
-    if [ "$os_system" == "Darwin" ]; then
-        result1=($(ping -c4 $domain | grep from))
-        result2=($(ping6 -c4 $domain | grep from))
-        formatted_results=()
-        for ((i = 0; i < ${#result1[@]}; i += 8)); do
-            formatted_results+=("${result1[i+6]} ${result1[i+7]}")
-        done
-        for ((i = 0; i < ${#result2[@]}; i += 8)); do
-            formatted_results+=("${result2[i+6]} ${result2[i+7]}")
-        done        
-    else
-        result1=($(ping -c4 -4 $domain | grep from))
-        result2=($(ping -c4 -6 $domain | grep from))
-        formatted_results=()
-        for ((i = 0; i < ${#result1[@]}; i += 9)); do
-            formatted_results+=("${result1[i+7]} ${result1[i+8]}")
-        done
-        for ((i = 0; i < ${#result2[@]}; i += 9)); do
-            formatted_results+=("${result2[i+7]} ${result2[i+8]}")
-        done        
+    # Check if dig returned any results for IPv6
+    if [[ -n "$ipv6_status" ]]; then
+        has_ipv6=true
     fi
 
-    json_data="{ \"results\": ["
-    for line in "${formatted_results[@]}"; do
-        json_data="${json_data} \"$line\","
-    done
-    json_data="${json_data%,} ]}"
-    echo $json_data > $json_file
+    echo "" # Add a newline for cleaner output
 
+    if $has_ipv4 && $has_ipv6; then
+        echo "Both local machine and WAN support IPv4 and IPv6."
+        echo "Testing both IPv4 and IPv6..."
+        TEST_MODE="both"
+    elif $has_ipv4; then
+        echo "Only IPv4 connectivity detected."
+        echo "Testing IPv4 only..."
+        TEST_MODE="ipv4_only"
+    elif $has_ipv6; then
+         echo "Only IPv6 connectivity detected."
+         echo "Testing IPv6 only..."
+         TEST_MODE="ipv6_only"
+    else
+        echo "No IPv4 or IPv6 connectivity detected. Cannot perform tests."
+        TEST_MODE="none"
+    fi
+    echo "" # Add a newline
+}
+
+# Function to perform standard DNS test
+perform_dns_test() {
+    local domain=$1
+    echo "--- DNS test ---"
     echo ""
-    python3 dns_test.py
-    rm doh4_output doh6_output dns dns6 ping_results.json dot dot6
-else
-    echo "IPv6 checks failed. Testing IPv4 only..."
-    while true; do
-        read -p "Enter the domain (e.g. google.com): " domain
 
-        if [[ $domain =~ ^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
-            if nslookup $domain >/dev/null 2>&1; then
-                echo ""
-                break
-            else
-                echo "Domain $domain is valid but does not exist. Please enter a valid domain."
-            fi
-        else
-            echo "Invalid domain. Please enter a valid domain."
-        fi
-    done
+    # Markdown table header
+    echo "| Address |"
 
-    doh_server=($(dig SVCB _dns.resolver.arpa +short | awk -F'1' '{print $2}' | awk -F'. ' '{print $1}'))
 
-    if [ -n "$doh_server" ]; then
-        echo "DOH test...."
-        doh4="curl -s -H 'accept: application/dns-json' 'https://$doh_server/dns-query?name=$domain&type=A'"
-        doh4_output=$(eval "$doh4")
-        echo "$doh4_output" >doh4_output
-
-        doh6_output='{"Answer":[{"name":"N/A","type":"N/A","TTL":"N/A","data":"N/A"}]}'
-        echo "$doh6_output" >doh6_output
-
-        echo "DOT test...."
-        dig +tls "$domain" +short > dot
-        echo "N/A" > dot6
-    else
-        echo "No DOH server available"
-        doh4_output='{"Answer":[{"name":"N/A","type":"N/A","TTL":"N/A","data":"N/A"}]}'
-        echo "$doh4_output" >doh4_output
-
-        doh6_output='{"Answer":[{"name":"N/A","type":"N/A","TTL":"N/A","data":"N/A"}]}'
-        echo "$doh6_output" >doh6_output
-
-        echo "No DOT server available"
-        echo "N/A" > dot
-        echo "N/A" > dot6
+    # Perform IPv4 DNS query if applicable using the default public server
+    if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv4_only" ]]; then
+        echo "IPv4 addresses (via $DEFAULT_DNS_SERVER_IPV4):"
+        # Use dig +short to get only the answer records
+        dig +short A "$domain" @"$DEFAULT_DNS_SERVER_IPV4" | while read -r line; do
+            echo "| $line |"
+        done
     fi
 
-
-    echo "DNS test...."
-    dig "$domain" +short > dns
-    dig "$domain" AAAA +short > dns6
-
-    echo "Ping test...."
-    json_file="ping_results.json"
-    if [ "$os_system" == "Darwin" ]; then
-        result1=($(ping -c4 $domain | grep from))
-        formatted_results=()
-        for ((i = 0; i < ${#result1[@]}; i += 8)); do
-            formatted_results+=("${result1[i+6]} ${result1[i+7]}")
-        done       
-    else
-        result1=($(ping -c4 -4 $domain | grep from))
-        formatted_results=()
-        for ((i = 0; i < ${#result1[@]}; i += 9)); do
-            formatted_results+=("${result1[i+7]} ${result1[i+8]}")
-        done  
+    # Perform IPv6 DNS query if applicable using the default public server
+    if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv6_only" ]]; then
+        echo "IPv6 addresses (via $DEFAULT_DNS_SERVER_IPV6):"
+        dig +short AAAA "$domain" @"$DEFAULT_DNS_SERVER_IPV6" | while read -r line; do
+             echo "| $line |"
+         done
     fi
-    json_data="{ \"results\": ["
-    for line in "${formatted_results[@]}"; do
-        json_data="${json_data} \"$line\","
-    done
-    json_data="${json_data%,} ]}"
-    echo $json_data > $json_file
+    echo "" # Add a newline
+}
 
+# Function to perform DNS over TLS (DoT) test
+perform_dot_test() {
+    local domain=$1
+    echo "--- DOT test ---"
     echo ""
-    python3 dns_test.py
-    rm doh4_output doh6_output dns dns6 ping_results.json dot dot6
+
+    # Markdown table header
+    echo "| Address |"
+
+    # Using default public DoT servers
+    if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv4_only" ]]; then
+        echo "IPv4 addresses (via DoT: $DEFAULT_DOT_SERVER_IPV4):"
+        # Check if the DoT server is reachable on port 853
+ #       timeout 5 bash -c "echo >/dev/tcp/$DEFAULT_DOT_SERVER_IPV4/853" 2>/dev/null && echo "| $DEFAULT_DOT_SERVER_IPV4 (DoT server reachable) |" || echo "| $DEFAULT_DOT_SERVER_IPV4 (DoT server not reachable) |"
+        # Attempt to query via DoT
+        dig +short A "$domain" @"$DEFAULT_DOT_SERVER_IPV4" | while read -r line; do
+             echo "| $line |"
+         done
+    fi
+
+    if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv6_only" ]]; then
+        echo "IPv6 addresses (via DoT: $DEFAULT_DOT_SERVER_IPV6):"
+        # Check if the IPv6 DoT server is reachable on port 853
+  #      timeout 5 bash -c "echo >/dev/tcp/[$DEFAULT_DOT_SERVER_IPV6]/853" 2>/dev/null && echo "| $DEFAULT_DOT_SERVER_IPV6 (DoT server reachable) |" || echo "| $DEFAULT_DOT_SERVER_IPV6 (DoT server not reachable) |"
+        # Attempt to query via DoT
+        dig +short AAAA "$domain" @"$DEFAULT_DOT_SERVER_IPV6" | while read -r line; do
+             echo "| $line |"
+         done
+    fi
+    echo "" # Add a newline
+}
+
+# Function to perform DNS over HTTPS (DoH) test
+perform_doh_test() {
+    local domain=$1
+    echo "--- DOH test ---"
+    echo ""
+
+    # Markdown table header
+    echo "| Type | TTL | Address |"
+
+    # Using default public DoH server
+    local doh_server="$DEFAULT_DOH_SERVER"
+
+    if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv4_only" ]]; then
+        echo "IPv4 results (via DoH: $doh_server):"
+        # Use dig +https to query the DoH endpoint
+        dig @"$doh_server" +https "$domain" A +noall +answer | while read -r line; do
+            # Parse the dig output to extract Type, TTL, and Address
+            # Example line: domain.com.        60      IN      A       1.2.3.4
+            local type=$(echo "$line" | awk '{print $4}')
+            local ttl=$(echo "$line" | awk '{print $2}')
+            local address=$(echo "$line" | awk '{print $5}')
+            echo "| $type | $ttl | $address |"
+        done
+    fi
+
+     if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv6_only" ]]; then
+         echo "IPv6 results (via DoH: $doh_server):"
+         dig @"$doh_server" +https "$domain" AAAA +noall +answer | while read -r line; do
+             # Parse the dig output to extract Type, TTL, and Address
+             # Example line: domain.com.        60      IN      AAAA       2001:db8::1
+             local type=$(echo "$line" | awk '{print $4}')
+             local ttl=$(echo "$line" | awk '{print $2}')
+             local address=$(echo "$line" | awk '{print $5}')
+             echo "| $type | $ttl | $address |"
+         done
+     fi
+    echo "" # Add a newline
+}
+
+
+# Function to perform Ping test
+perform_ping_test() {
+    local domain=$1
+    echo "--- Ping test ---"
+    echo ""
+
+    # Markdown table header
+    echo "| IPv4 | IPv6 |"
+    echo "|---|---| "
+
+    local ipv4_pings=()
+    local ipv6_pings=()
+
+    # Perform IPv4 ping if applicable
+    if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv4_only" ]]; then
+        echo "Pinging IPv4..."
+        # Ping 4 times, wait 1 second for response (-W 1), extract time
+        local ping_output_ipv4=$(ping -c 4 -W 1 "$domain" 2>&1)
+        echo "--- Raw IPv4 Ping Output ---"
+        echo "$ping_output_ipv4"
+        echo "----------------------------"
+        echo "$ping_output_ipv4" | grep " time=" | sed 's/.*time=\([0-9\.]*\).*/\1/' | head -n 4 | while read -r time; do
+            echo "Captured IPv4 time: $time" # Debugging line
+            ipv4_pings+=("$time ms")
+        done
+    fi
+
+    # Perform IPv6 ping if applicable
+    if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv6_only" ]]; then
+        echo "Pinging IPv6..."
+        # ping -6 4 times, wait 1 second for response (-W 1), extract time
+        local ping_output_ipv6=$(ping -6 -c 4 -W 1 "$domain" 2>&1)
+        echo "--- Raw IPv6 Ping Output ---"
+        echo "$ping_output_ipv6"
+        echo "----------------------------"
+        echo "$ping_output_ipv6" | grep " time=" | sed 's/.*time=\([0-9\.]*\).*/\1/' | head -n 4 | while read -r time; do
+            echo "Captured IPv6 time: $time" # Debugging line
+            ipv6_pings+=("$time ms")
+        done
+    fi
+
+    # Print ping results side-by-side in the table format
+    local max_pings=${#ipv4_pings[@]}
+    if (( ${#ipv6_pings[@]} > max_pings )); then
+        max_pings=${#ipv6_pings[@]}
+    fi
+
+    # Loop through the results and print them row by row
+    for i in $(seq 0 $((max_pings - 1))); do
+        local ipv4_res="${ipv4_pings[$i]:-N/A}" # Use N/A if no result for this index
+        local ipv6_res="${ipv6_pings[$i]:-N/A}" # Use N/A if no result for this index
+        echo "| $ipv4_res | $ipv6_res |"
+    done
+    echo "" # Add a newline
+}
+
+
+# --- Main script execution ---
+
+echo "DNS Test Script"
+echo "==============="
+echo "" # Add a newline
+
+# Check connectivity first
+check_connectivity
+
+# Exit if no connectivity was detected
+if [[ "$TEST_MODE" == "none" ]]; then
+    exit 1
 fi
+
+# Prompt the user for the domain to test
+read -p "Enter the domain (e.g. google.com): " domain
+echo "" # Add a newline
+
+# Perform the tests based on the detected connectivity mode
+if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv4_only" || "$TEST_MODE" == "ipv6_only" ]]; then
+    perform_doh_test "$domain"
+    perform_dot_test "$domain"
+    perform_dns_test "$domain"
+    perform_ping_test "$domain"
+fi
+
+echo "Tests complete."
