@@ -1,50 +1,51 @@
-# DNS test
+# DNS Test Script
 
-Test DNS server with DOH, DOT, DNS and run ping test with IPv4 and IPv6.
-
-Test is run with [Adam:one](https://adamnet.works/) on pfSense
+This script checks for IPv4 and IPv6 connectivity and then performs DNS, DoT, DoH, and ping tests for a specified domain.
 
 <img
-  src="/assets/results.png"
+  src="assets/results.png"
   alt="Results"
   title="Results"
   style="display: inline-block;">
 
 ## Requirements:
-<ol>
- <li>Currently supports linux and mac. It should run on windows in WSL *not tested*
-<li> Needs python with modules installed:
-   <ol>
-     <li>Prettytable</li>
-   </ol>
-</ol>
 
+*   Currently supports Linux and macOS. It should run on Windows in WSL (*not tested*).
+*   The following command-line tools must be installed:
+    *   `dig` (part of `dnsutils` or `bind-utils`)
+    *   `ping` and `ping -6` (part of `iputils-ping` or similar)
+    *   `curl`
+    *   `jq`
+    *   `bc`
 
-### Installing python modules:
-```
-pip install -U prettytable
-```
-or
-```
-pip3 install -U prettytable
-```
-if the above fails,
-for debian or ubuntu based:
-```
-sudo apt install python3-prettytable
-```
-for arch based
-```
-sudo pacman -S python3-prettytable
-```
-More info on [WSL](https://learn.microsoft.com/en-us/windows/wsl/install)
+### Installing Dependencies:
 
-### To run locally
+**For Debian/Ubuntu based systems:**
+```bash
+sudo apt-get update
+sudo apt-get install -y dnsutils iputils-ping curl jq bc
 ```
+
+**For Arch based systems:**
+```bash
+sudo pacman -Syu
+sudo pacman -S --noconfirm dnsutils inetutils curl jq bc
+```
+
+**For macOS (using Homebrew):**
+```bash
+brew install bind curl jq
+```
+
+More info on [WSL](https://learn.microsoft.com/en-us/windows/wsl/install).
+
+### To run locally:
+```bash
 git clone https://github.com/w1tw0lf/DNS_test.git
 cd DNS_test/
 ./dns_test.sh
 ```
-### Possible issues
 
-1. On older macOS, you might find that it gives an issue with dig command, fix is to update bind via brew witth ```brew install bind```
+### Possible issues:
+
+1.  On older macOS, you might find that it gives an issue with the `dig` command. The fix is to update `bind` via brew with ```brew install bind```.
