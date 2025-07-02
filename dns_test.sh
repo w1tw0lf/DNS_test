@@ -17,6 +17,17 @@ DEFAULT_DOT_SERVER_IPV6=$(dig $domain+noall +stats | awk '/SERVER:/ {sub(/#.*/, 
 DEFAULT_DOH_SERVER=($(dig SVCB _dns.resolver.arpa +short | awk 'NF && /^1 / {sub(/\.$/, "", $2); print $2}'))
 # -------------------------------------------
 
+# Global arrays to store test results
+declare -a DNS_IPV4_RESULTS
+declare -a DNS_IPV6_RESULTS
+declare -a DOT_IPV4_RESULTS
+declare -a DOT_IPV6_RESULTS
+declare -a DOH_IPV4_RESULTS
+declare -a DOH_IPV6_RESULTS
+declare -a PING_IPV4_RESULTS
+declare -a PING_IPV6_RESULTS
+
+
 
 # Function to check IPv4/IPv6 connectivity
 check_connectivity() {
@@ -64,158 +75,207 @@ check_connectivity() {
 # Function to perform standard DNS test
 perform_dns_test() {
     local domain=$1
-    echo "--- DNS test ---"
-    echo ""
-
-    # Markdown table header
-    echo "| Address |"
-
 
     # Perform IPv4 DNS query if applicable using the default public server
     if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv4_only" ]]; then
-        echo "IPv4 addresses (via $DEFAULT_DNS_SERVER_IPV4):"
-        # Use dig +short to get only the answer records
-        dig +short A "$domain" @"$DEFAULT_DNS_SERVER_IPV4" | while read -r line; do
-            echo "| $line |"
-        done
+        while read -r line; do
+            DNS_IPV4_RESULTS+=("$line")
+        done < <(dig +short A "$domain" @"$DEFAULT_DNS_SERVER_IPV4")
     fi
 
     # Perform IPv6 DNS query if applicable using the default public server
     if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv6_only" ]]; then
-        echo "IPv6 addresses (via $DEFAULT_DNS_SERVER_IPV6):"
-        dig +short AAAA "$domain" @"$DEFAULT_DNS_SERVER_IPV6" | while read -r line; do
-             echo "| $line |"
-         done
+        while read -r line; do
+            DNS_IPV6_RESULTS+=("$line")
+        done < <(dig +short AAAA "$domain" @"$DEFAULT_DNS_SERVER_IPV6")
     fi
-    echo "" # Add a newline
 }
 
 # Function to perform DNS over TLS (DoT) test
 perform_dot_test() {
     local domain=$1
-    echo "--- DOT test ---"
-    echo ""
-
-    # Markdown table header
-    echo "| Address |"
 
     # Using default public DoT servers
     if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv4_only" ]]; then
-        echo "IPv4 addresses (via DoT: $DEFAULT_DOT_SERVER_IPV4):"
-        # Check if the DoT server is reachable on port 853
- #       timeout 5 bash -c "echo >/dev/tcp/$DEFAULT_DOT_SERVER_IPV4/853" 2>/dev/null && echo "| $DEFAULT_DOT_SERVER_IPV4 (DoT server reachable) |" || echo "| $DEFAULT_DOT_SERVER_IPV4 (DoT server not reachable) |"
-        # Attempt to query via DoT
-        dig +short A "$domain" @"$DEFAULT_DOT_SERVER_IPV4" | while read -r line; do
-             echo "| $line |"
-         done
+        while read -r line; do
+            DOT_IPV4_RESULTS+=("$line")
+        done < <(dig +short A "$domain" @"$DEFAULT_DOT_SERVER_IPV4")
     fi
 
     if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv6_only" ]]; then
-        echo "IPv6 addresses (via DoT: $DEFAULT_DOT_SERVER_IPV6):"
-        # Check if the IPv6 DoT server is reachable on port 853
-  #      timeout 5 bash -c "echo >/dev/tcp/[$DEFAULT_DOT_SERVER_IPV6]/853" 2>/dev/null && echo "| $DEFAULT_DOT_SERVER_IPV6 (DoT server reachable) |" || echo "| $DEFAULT_DOT_SERVER_IPV6 (DoT server not reachable) |"
-        # Attempt to query via DoT
-        dig +short AAAA "$domain" @"$DEFAULT_DOT_SERVER_IPV6" | while read -r line; do
-             echo "| $line |"
-         done
+        while read -r line; do
+            DOT_IPV6_RESULTS+=("$line")
+        done < <(dig +short AAAA "$domain" @"$DEFAULT_DOT_SERVER_IPV6")
     fi
-    echo "" # Add a newline
 }
 
 # Function to perform DNS over HTTPS (DoH) test
 perform_doh_test() {
     local domain=$1
-    echo "--- DOH test ---"
-    echo ""
-
-    # Markdown table header
-    echo "| Type | TTL | Address |"
 
     # Using default public DoH server
     local doh_server="$DEFAULT_DOH_SERVER"
 
     if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv4_only" ]]; then
-        echo "IPv4 results (via DoH: $doh_server):"
-        # Use dig +https to query the DoH endpoint
-        dig @"$doh_server" +https "$domain" A +noall +answer | while read -r line; do
-            # Parse the dig output to extract Type, TTL, and Address
-            # Example line: domain.com.        60      IN      A       1.2.3.4
+        while read -r line; do
             local type=$(echo "$line" | awk '{print $4}')
             local ttl=$(echo "$line" | awk '{print $2}')
             local address=$(echo "$line" | awk '{print $5}')
-            echo "| $type | $ttl | $address |"
-        done
+            DOH_IPV4_RESULTS+=("$type,$ttl,$address")
+        done < <(dig @"$doh_server" +https "$domain" A +noall +answer)
     fi
 
      if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv6_only" ]]; then
-         echo "IPv6 results (via DoH: $doh_server):"
-         dig @"$doh_server" +https "$domain" AAAA +noall +answer | while read -r line; do
-             # Parse the dig output to extract Type, TTL, and Address
-             # Example line: domain.com.        60      IN      AAAA       2001:db8::1
+         while read -r line; do
              local type=$(echo "$line" | awk '{print $4}')
              local ttl=$(echo "$line" | awk '{print $2}')
              local address=$(echo "$line" | awk '{print $5}')
-             echo "| $type | $ttl | $address |"
-         done
+             DOH_IPV6_RESULTS+=("$type,$ttl,$address")
+         done < <(dig @"$doh_server" +https "$domain" AAAA +noall +answer)
      fi
-    echo "" # Add a newline
 }
 
 
 # Function to perform Ping test
 perform_ping_test() {
     local domain=$1
-    echo "--- Ping test ---"
-    echo ""
-
-    # Markdown table header
-    echo "| IPv4 | IPv6 |"
-    echo "|---|---| "
-
-    local ipv4_pings=()
-    local ipv6_pings=()
 
     # Perform IPv4 ping if applicable
     if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv4_only" ]]; then
-        echo "Pinging IPv4..."
-        # Ping 4 times, wait 1 second for response (-W 1), extract time
         local ping_output_ipv4=$(ping -c 4 -W 1 "$domain" 2>&1)
-        echo "--- Raw IPv4 Ping Output ---"
-        echo "$ping_output_ipv4"
-        echo "----------------------------"
-        echo "$ping_output_ipv4" | grep " time=" | sed 's/.*time=\([0-9\.]*\).*/\1/' | head -n 4 | while read -r time; do
-            echo "Captured IPv4 time: $time" # Debugging line
-            ipv4_pings+=("$time ms")
-        done
+        while read -r time; do
+            PING_IPV4_RESULTS+=("$time")
+        done < <(echo "$ping_output_ipv4" | grep " time=" | sed 's/.*time=\([0-9\.]*\).*/\1/' | head -n 4)
     fi
 
     # Perform IPv6 ping if applicable
     if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv6_only" ]]; then
-        echo "Pinging IPv6..."
-        # ping -6 4 times, wait 1 second for response (-W 1), extract time
         local ping_output_ipv6=$(ping -6 -c 4 -W 1 "$domain" 2>&1)
-        echo "--- Raw IPv6 Ping Output ---"
-        echo "$ping_output_ipv6"
-        echo "----------------------------"
-        echo "$ping_output_ipv6" | grep " time=" | sed 's/.*time=\([0-9\.]*\).*/\1/' | head -n 4 | while read -r time; do
-            echo "Captured IPv6 time: $time" # Debugging line
-            ipv6_pings+=("$time ms")
-        done
+        while read -r time; do
+            PING_IPV6_RESULTS+=("$time")
+        done < <(echo "$ping_output_ipv6" | grep " time=" | sed 's/.*time=\([0-9\.]*\).*/\1/' | head -n 4)
     fi
+}
 
-    # Print ping results side-by-side in the table format
-    local max_pings=${#ipv4_pings[@]}
-    if (( ${#ipv6_pings[@]} > max_pings )); then
-        max_pings=${#ipv6_pings[@]}
-    fi
+# Function to print the summary table
+print_summary_table() {
+    local max_test_type_len=$(echo -n "Test Type" | wc -c)
+    local max_protocol_len=$(echo -n "Protocol" | wc -c)
+    local max_result_len=$(echo -n "Result" | wc -c)
 
-    # Loop through the results and print them row by row
-    for i in $(seq 0 $((max_pings - 1))); do
-        local ipv4_res="${ipv4_pings[$i]:-N/A}" # Use N/A if no result for this index
-        local ipv6_res="${ipv6_pings[$i]:-N/A}" # Use N/A if no result for this index
-        echo "| $ipv4_res | $ipv6_res |"
+    # Calculate max lengths for DNS results
+    for result in "${DNS_IPV4_RESULTS[@]}"; do
+        if (( $(echo -n "DNS" | wc -c) > max_test_type_len )); then max_test_type_len=$(echo -n "DNS" | wc -c); fi
+        if (( $(echo -n "IPv4" | wc -c) > max_protocol_len )); then max_protocol_len=$(echo -n "IPv4" | wc -c); fi
+        if (( $(echo -n "$result" | wc -c) > max_result_len )); then max_result_len=$(echo -n "$result" | wc -c); fi
     done
-    echo "" # Add a newline
+    for result in "${DNS_IPV6_RESULTS[@]}"; do
+        if (( $(echo -n "DNS" | wc -c) > max_test_type_len )); then max_test_type_len=$(echo -n "DNS" | wc -c); fi
+        if (( $(echo -n "IPv6" | wc -c) > max_protocol_len )); then max_protocol_len=$(echo -n "IPv6" | wc -c); fi
+        if (( $(echo -n "$result" | wc -c) > max_result_len )); then max_result_len=$(echo -n "$result" | wc -c); fi
+    done
+
+    # Calculate max lengths for DoT results
+    for result in "${DOT_IPV4_RESULTS[@]}"; do
+        if (( $(echo -n "DoT" | wc -c) > max_test_type_len )); then max_test_type_len=$(echo -n "DoT" | wc -c); fi
+        if (( $(echo -n "IPv4" | wc -c) > max_protocol_len )); then max_protocol_len=$(echo -n "IPv4" | wc -c); fi
+        if (( $(echo -n "$result" | wc -c) > max_result_len )); then max_result_len=$(echo -n "$result" | wc -c); fi
+    done
+    for result in "${DOT_IPV6_RESULTS[@]}"; do
+        if (( $(echo -n "DoT" | wc -c) > max_test_type_len )); then max_test_type_len=$(echo -n "DoT" | wc -c); fi
+        if (( $(echo -n "IPv6" | wc -c) > max_protocol_len )); then max_protocol_len=$(echo -n "IPv6" | wc -c); fi
+        if (( $(echo -n "$result" | wc -c) > max_result_len )); then max_result_len=$(echo -n "$result" | wc -c); fi
+    done
+
+    # Calculate max lengths for DoH results
+    for result in "${DOH_IPV4_RESULTS[@]}"; do
+        IFS=',' read -r type ttl address <<< "$result"
+        if (( $(echo -n "DoH" | wc -c) > max_test_type_len )); then max_test_type_len=$(echo -n "DoH" | wc -c); fi
+        if (( $(echo -n "IPv4 ($type, TTL: $ttl)" | wc -c) > max_protocol_len )); then max_protocol_len=$(echo -n "IPv4 ($type, TTL: $ttl)" | wc -c); fi
+        if (( $(echo -n "$address" | wc -c) > max_result_len )); then max_result_len=$(echo -n "$address" | wc -c); fi
+    done
+    for result in "${DOH_IPV6_RESULTS[@]}"; do
+        IFS=',' read -r type ttl address <<< "$result"
+        if (( $(echo -n "DoH" | wc -c) > max_test_type_len )); then max_test_type_len=$(echo -n "DoH" | wc -c); fi
+        if (( $(echo -n "IPv6 ($type, TTL: $ttl)" | wc -c) > max_protocol_len )); then max_protocol_len=$(echo -n "IPv6 ($type, TTL: $ttl)" | wc -c); fi
+        if (( $(echo -n "$address" | wc -c) > max_result_len )); then max_result_len=$(echo -n "$address" | wc -c); fi
+    done
+
+    # Calculate max lengths for Ping results
+    local ipv4_ping_avg="N/A"
+    if (( ${#PING_IPV4_RESULTS[@]} > 0 )); then
+        local sum=0
+        for time_val in "${PING_IPV4_RESULTS[@]}"; do
+            sum=$(echo "$sum + $time_val" | bc)
+        done
+        ipv4_ping_avg="$(echo "scale=2; $sum / ${#PING_IPV4_RESULTS[@]}" | bc) ms"
+    fi
+    if (( $(echo -n "Ping" | wc -c) > max_test_type_len )); then max_test_type_len=$(echo -n "Ping" | wc -c); fi
+    if (( $(echo -n "IPv4" | wc -c) > max_protocol_len )); then max_protocol_len=$(echo -n "IPv4" | wc -c); fi
+    if (( $(echo -n "$ipv4_ping_avg" | wc -c) > max_result_len )); then max_result_len=$(echo -n "$ipv4_ping_avg" | wc -c); fi
+
+    local ipv6_ping_avg="N/A"
+    if (( ${#PING_IPV6_RESULTS[@]} > 0 )); then
+        local sum=0
+        for time_val in "${PING_IPV6_RESULTS[@]}"; do
+            sum=$(echo "$sum + $time_val" | bc)
+        done
+        ipv6_ping_avg="$(echo "scale=2; $sum / ${#PING_IPV6_RESULTS[@]}" | bc) ms"
+    fi
+    if (( $(echo -n "Ping" | wc -c) > max_test_type_len )); then max_test_type_len=$(echo -n "Ping" | wc -c); fi
+    if (( $(echo -n "IPv6" | wc -c) > max_protocol_len )); then max_protocol_len=$(echo -n "IPv6" | wc -c); fi
+    if (( $(echo -n "$ipv6_ping_avg" | wc -c) > max_result_len )); then max_result_len=$(echo -n "$ipv6_ping_avg" | wc -c); fi
+
+    echo "# DNS Test Results"
+    echo ""
+
+    # Print header
+    printf "|%s|%s|%s|
+" "$(printf '%0.s-' $(seq 1 $((max_test_type_len + 2))))" "$(printf '%0.s-' $(seq 1 $((max_protocol_len + 2))))" "$(printf '%0.s-' $(seq 1 $((max_result_len + 2))))"
+    printf "| %-*s | %-*s | %-*s |
+" "$max_test_type_len" "Test Type" "$max_protocol_len" "Protocol" "$max_result_len" "Result"
+    printf "|%s|%s|%s|
+" "$(printf '%0.s-' $(seq 1 $((max_test_type_len + 2))))" "$(printf '%0.s-' $(seq 1 $((max_protocol_len + 2))))" "$(printf '%0.s-' $(seq 1 $((max_result_len + 2)))))"
+
+    # DNS Results
+    for result in "${DNS_IPV4_RESULTS[@]}"; do
+        printf "| %-*s | %-*s | %-*s |
+" "$max_test_type_len" "DNS" "$max_protocol_len" "IPv4" "$max_result_len" "$result"
+    done
+    for result in "${DNS_IPV6_RESULTS[@]}"; do
+        printf "| %-*s | %-*s | %-*s |
+" "$max_test_type_len" "DNS" "$max_protocol_len" "IPv6" "$max_result_len" "$result"
+    done
+
+    # DoT Results
+    for result in "${DOT_IPV4_RESULTS[@]}"; do
+        printf "| %-*s | %-*s | %-*s |
+" "$max_test_type_len" "DoT" "$max_protocol_len" "IPv4" "$max_result_len" "$result"
+    done
+    for result in "${DOT_IPV6_RESULTS[@]}"; do
+        printf "| %-*s | %-*s | %-*s |
+" "$max_test_type_len" "DoT" "$max_protocol_len" "IPv6" "$max_result_len" "$result"
+    done
+
+    # DoH Results
+    for result in "${DOH_IPV4_RESULTS[@]}"; do
+        IFS=',' read -r type ttl address <<< "$result"
+        printf "| %-*s | %-*s | %-*s |
+" "$max_test_type_len" "DoH" "$max_protocol_len" "IPv4 ($type, TTL: $ttl)" "$max_result_len" "$address"
+    done
+    for result in "${DOH_IPV6_RESULTS[@]}"; do
+        IFS=',' read -r type ttl address <<< "$result"
+        printf "| %-*s | %-*s | %-*s |
+" "$max_test_type_len" "DoH" "$max_protocol_len" "IPv6 ($type, TTL: $ttl)" "$max_result_len" "$address"
+    done
+
+    # Ping Results
+    printf "| %-*s | %-*s | %-*s |
+" "$max_test_type_len" "Ping" "$max_protocol_len" "IPv4" "$max_result_len" "$ipv4_ping_avg"
+    printf "| %-*s | %-*s | %-*s |
+" "$max_test_type_len" "Ping" "$max_protocol_len" "IPv6" "$max_result_len" "$ipv6_ping_avg"
+    printf "|%s|%s|%s|
+" "$(printf -- '-%.0s' $(seq 1 $((max_test_type_len + 2))))" "$(printf -- '-%.0s' $(seq 1 $((max_protocol_len + 2))))" "$(printf -- '-%.0s' $(seq 1 $((max_result_len + 2))))"
 }
 
 
@@ -245,4 +305,4 @@ if [[ "$TEST_MODE" == "both" || "$TEST_MODE" == "ipv4_only" || "$TEST_MODE" == "
     perform_ping_test "$domain"
 fi
 
-echo "Tests complete."
+print_summary_table
