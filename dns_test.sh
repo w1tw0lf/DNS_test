@@ -186,6 +186,80 @@ query() {
     awk -v t="$rrtype" '!/^;/ && $4 == t {print $NF}' <<<"$out"
 }
 
+# --------------------------------------------------------------------- DNSSEC
+# Helpers that pull pieces out of `dig +dnssec` output.
+ds_rcode()  { awk -F'status: ' '/->>HEADER<<-/{sub(/,.*/,"",$2); print $2; exit}'; }
+ds_flags()  { sed -n 's/^;; flags: \([^;]*\);.*/\1/p'; }            # e.g. "qr rd ra ad"
+ds_has_ad() { [[ " $(ds_flags) " == *" ad "* ]]; }                  # consumes stdin
+ds_has_rrsig() { awk '!/^;/ && $4 == "RRSIG" {found=1} END{exit found?0:1}'; }
+ds_has_ede() { grep -q '; EDE:'; }
+
+# dnssec_resolver_check <resolver> -> sets DS_VALIDATE (yes|partial|no|unknown), DS_VALIDATE_NOTE
+DS_VALIDATE='' DS_VALIDATE_NOTE=''
+dnssec_resolver_check() {
+    local r=$1 good bad good_ad=0 bad_handled=0 bad_st bad_ans
+    # positive control: a domain that is DNSSEC-signed and valid
+    good=$(dig +timeout=3 +tries=1 +dnssec +noall +comments +answer A cloudflare.com "@$r" 2>&1)
+    if [[ -z "$(ds_rcode <<<"$good")" ]]; then
+        DS_VALIDATE=unknown
+        DS_VALIDATE_NOTE="could not reach the DNSSEC test domains"
+        return
+    fi
+    ds_has_ad <<<"$good" && good_ad=1
+    # negative control: a domain published with deliberately broken signatures
+    bad=$(dig +timeout=3 +tries=1 +dnssec +noall +comments +answer A dnssec-failed.org "@$r" 2>&1)
+    bad_st=$(ds_rcode <<<"$bad")
+    bad_ans=$(awk '!/^;/ && $4 == "A" {n++} END{print n+0}' <<<"$bad")
+    if [[ "$bad_st" == SERVFAIL ]] || ds_has_ede <<<"$bad" || [[ "$bad_ans" -eq 0 ]]; then
+        bad_handled=1
+    fi
+    if   (( good_ad && bad_handled )); then
+        DS_VALIDATE=yes
+        DS_VALIDATE_NOTE="AD flag on signed zones; rejects dnssec-failed.org"
+    elif (( good_ad )); then
+        DS_VALIDATE=partial
+        DS_VALIDATE_NOTE="sets AD on signed zones but still answered for dnssec-failed.org"
+    elif (( bad_handled )); then
+        DS_VALIDATE=partial
+        DS_VALIDATE_NOTE="rejects bad signatures but sets no AD flag on signed zones"
+    else
+        DS_VALIDATE=no
+        DS_VALIDATE_NOTE="returned a usable answer for dnssec-failed.org"
+    fi
+}
+
+# dnssec_domain_check <resolver>
+#   sets DS_DOMAIN (secure|signed|insecure|bogus|blocked|unknown) and DS_DOMAIN_NOTE
+DS_DOMAIN='' DS_DOMAIN_NOTE=''
+dnssec_domain_check() {
+    local r=$1 out st ede ede_txt cd
+    out=$(dig +timeout=3 +tries=1 +dnssec +noall +comments +answer A "$DOMAIN" "@$r" 2>&1)
+    st=$(ds_rcode <<<"$out")
+    ede=$(sed -n 's/^; EDE: \([0-9][0-9]*\).*/\1/p'        <<<"$out" | head -1)
+    ede_txt=$(sed -n 's/^; EDE: [0-9][0-9]* (\([^)]*\)).*/\1/p' <<<"$out" | head -1)
+    if [[ "$st" == SERVFAIL ]]; then
+        # signed zone the resolver rejects, or just a server error? re-ask with checking disabled
+        cd=$(dig +timeout=3 +tries=1 +dnssec +cd +noall +comments +answer A "$DOMAIN" "@$r" 2>&1)
+        if ds_has_rrsig <<<"$cd"; then
+            DS_DOMAIN=bogus;   DS_DOMAIN_NOTE="signed zone, but validation failed at the resolver${ede:+ — EDE $ede: $ede_txt}"
+        else
+            DS_DOMAIN=unknown; DS_DOMAIN_NOTE="SERVFAIL — server error, not necessarily DNSSEC${ede:+ (EDE $ede: $ede_txt)}"
+        fi
+    elif [[ "$ede" =~ ^(6|7|8|9|10|11|12)$ ]]; then
+        DS_DOMAIN=bogus;    DS_DOMAIN_NOTE="resolver reports a DNSSEC problem — EDE $ede: $ede_txt"
+    elif [[ "$ede" =~ ^(15|16|17|18)$ ]]; then
+        DS_DOMAIN=blocked;  DS_DOMAIN_NOTE="blocked/filtered by the resolver — EDE $ede: $ede_txt"
+    elif ds_has_ad <<<"$out"; then
+        DS_DOMAIN=secure;   DS_DOMAIN_NOTE="signed zone, AD flag set by the resolver${ede:+ (EDE $ede)}"
+    elif ds_has_rrsig <<<"$out"; then
+        DS_DOMAIN=signed;   DS_DOMAIN_NOTE="RRSIGs present but the resolver set no AD flag"
+    elif [[ "$st" == NOERROR || "$st" == NXDOMAIN ]]; then
+        DS_DOMAIN=insecure; DS_DOMAIN_NOTE="no DS record at the parent — DNSSEC not in use"
+    else
+        DS_DOMAIN=unknown;  DS_DOMAIN_NOTE="no usable response (${st:-no answer})"
+    fi
+}
+
 # -------------------------------------------------------------------- results
 declare -a ROWS             # each entry: c1 SEP c2 SEP c3 SEP c4 SEP kind
 add_row() { ROWS+=("$1$SEP$2$SEP$3$SEP$4$SEP$5"); }
@@ -359,6 +433,7 @@ if ! $V4_UP && ! $V6_UP; then
     printf '\n  %sNeither resolver is reachable — aborting.%s\n' "$RED" "$RST" >&2
     exit 1
 fi
+$V4_UP && PRIMARY_RES=$RES_V4 || PRIMARY_RES=$RES_V6   # used for the DNSSEC checks
 
 # --- run the probes ---
 section "Tests for \"$DOMAIN\""
@@ -372,4 +447,28 @@ ping_row v4 "$V4_UP"
 ping_row v6 "$V6_UP"
 
 render_table
+
+# --- DNSSEC ---
+section "DNSSEC"
+dnssec_resolver_check "$PRIMARY_RES"
+dnssec_domain_check   "$PRIMARY_RES"
+case "$DS_VALIDATE" in
+    yes)     ds_mark="$OK_MARK"      ; ds_msg="validates" ;;
+    partial) ds_mark="${YLW}~${RST}" ; ds_msg="partially validates" ;;
+    no)      ds_mark="$BAD_MARK"     ; ds_msg="does not validate" ;;
+    *)       ds_mark="${DIM}·${RST}" ; ds_msg="undetermined" ;;
+esac
+case "$DS_DOMAIN" in
+    secure)   dd_mark="$OK_MARK"     ; dd_msg="secure" ;;
+    signed)   dd_mark="${YLW}~${RST}"; dd_msg="signed, not validated here" ;;
+    bogus)    dd_mark="$BAD_MARK"    ; dd_msg="BOGUS" ;;
+    blocked)  dd_mark="${YLW}~${RST}"; dd_msg="blocked / filtered" ;;
+    insecure) dd_mark="${DIM}·${RST}"; dd_msg="not signed" ;;
+    *)        dd_mark="${DIM}·${RST}"; dd_msg="undetermined" ;;
+esac
+printf '    %-22s %s %s%s\n' "Resolver validation" "$ds_mark" "$ds_msg" \
+       "${DS_VALIDATE_NOTE:+  ${DIM}(${DS_VALIDATE_NOTE})${RST}}"
+printf '    %-22s %s %s%s\n' "$DOMAIN" "$dd_mark" "$dd_msg" \
+       "${DS_DOMAIN_NOTE:+  ${DIM}(${DS_DOMAIN_NOTE})${RST}}"
+
 printf '\n'
