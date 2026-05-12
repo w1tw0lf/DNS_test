@@ -1,6 +1,14 @@
 # DNS Test Script
 
-This script checks for IPv4 and IPv6 connectivity and then performs DNS, DoT, DoH, and ping tests for a specified domain.
+Probe the DNS resolver your network hands you — typically your router — over
+**plain DNS**, **DNS-over-TLS (DoT)** and **DNS-over-HTTPS (DoH)**, on both
+**IPv4** and **IPv6**, then **ping** the target domain.
+
+The resolver is auto-discovered from the system (`/etc/resolv.conf` first, then
+NetworkManager / systemd-resolved / `scutil`, then the default gateway) — no
+public DNS servers are hard-coded; everything is tested against *your* network.
+If the resolver advertises encrypted endpoints via DDR (RFC 9462/9463, the
+`_dns.resolver.arpa` SVCB record), those are used for the DoH test.
 
 <img
   src="assets/results.png"
@@ -8,44 +16,50 @@ This script checks for IPv4 and IPv6 connectivity and then performs DNS, DoT, Do
   title="Results"
   style="display: inline-block;">
 
-## Requirements:
+## Requirements
 
-*   Currently supports Linux and macOS. It should run on Windows in WSL (*not tested*).
-*   The following command-line tools must be installed:
-    *   `dig` (part of `dnsutils` or `bind-utils`)
-    *   `ping` and `ping -6` (part of `iputils-ping` or similar)
-    *   `curl`
-    *   `jq`
-    *   `bc`
+* Linux or macOS (should also work on Windows under WSL — *not tested*).
+* `dig` — from `bind` / `bind-utils` / `dnsutils`.
+  **DoT and DoH require `dig` ≥ 9.18**; with an older `dig` those two tests are
+  skipped and the rest still run.
+* `ping` (and `ping -6` / `ping6`) — from `iputils` on Linux, built in on macOS.
 
-### Installing Dependencies:
+### Installing dependencies
 
-**For Debian/Ubuntu based systems:**
+**Debian/Ubuntu:**
 ```bash
 sudo apt-get update
-sudo apt-get install -y dnsutils iputils-ping curl jq bc
+sudo apt-get install -y dnsutils iputils-ping
 ```
 
-**For Arch based systems:**
+**Arch:**
 ```bash
-sudo pacman -Syu
-sudo pacman -S --noconfirm dnsutils inetutils curl jq bc
+sudo pacman -S --needed bind iputils
 ```
 
-**For macOS (using Homebrew):**
+**macOS (Homebrew, for an up-to-date `dig`):**
 ```bash
-brew install bind curl jq
+brew install bind
 ```
 
 More info on [WSL](https://learn.microsoft.com/en-us/windows/wsl/install).
 
-### To run locally:
+## Usage
+
 ```bash
 git clone https://github.com/w1tw0lf/DNS_test.git
 cd DNS_test/
-./dns_test.sh
+./dns_test.sh                 # prompts for the domain (defaults to google.com)
+./dns_test.sh example.com     # or pass it on the command line
+NO_COLOR=1 ./dns_test.sh ...  # disable coloured output
 ```
 
-### Possible issues:
+## Notes
 
-1.  On older macOS, you might find that it gives an issue with the `dig` command. The fix is to update `bind` via brew with ```brew install bind```.
+* Most home routers answer plain DNS but not DoT/DoH — a `not offered` result
+  for those rows is normal and simply tells you the router doesn't run an
+  encrypted resolver on `:853` / `:443`.
+* `REFUSED` on a lookup means the resolver declined the query (e.g. a reserved
+  TLD like `.example`, or split-horizon policy), not that the transport failed.
+* On older macOS, `dig` issues are usually fixed by updating `bind`:
+  `brew install bind`.
